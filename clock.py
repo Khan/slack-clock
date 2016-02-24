@@ -65,18 +65,33 @@ def ascii_clock(dt, twentyfour):
         hh = dt.hour
     else:
         hh = dt.hour % 12
+        if hh == 0:
+            hh = 12
+
+    if twentyfour or hh >= 10:
+        hour = [
+            ascii_digit(hh / 10),
+            ASCII_SPACE,
+            ascii_digit(hh % 10),
+        ]
+    else:
+        hour = [
+            ASCII_SPACE,
+            ASCII_SPACE,
+            ASCII_SPACE,
+            ASCII_SPACE,
+            ascii_digit(hh)
+        ]
+
     mm = dt.minute
-    return '\n'.join(ascii_concat([
-        ascii_digit(hh / 10),
-        ASCII_SPACE,
-        ascii_digit(hh % 10),
-        ASCII_SPACE,
-        ASCII_COLON,
-        ASCII_SPACE,
+    minute = [
         ascii_digit(mm / 10),
         ASCII_SPACE,
         ascii_digit(mm % 10),
-    ]))
+    ]
+
+    return '\n'.join(ascii_concat(
+        hour + [ASCII_SPACE, ASCII_COLON, ASCII_SPACE] + minute))
 
 
 class Clock(ndb.Model):
@@ -171,8 +186,7 @@ class SlackCommand(webapp2.RequestHandler):
         raw_tz = self.request.POST['text']
         tz = canonicalize_timezone(raw_tz)
         if not tz:
-            self.response.write(json.dumps(
-                {'text': '"%s" is not a valid timezone.' % raw_tz}))
+            self.response.write('"%s" is not a valid timezone.' % raw_tz)
             return
         existing = Clock.get_by_id(channel_id)
         if existing:
