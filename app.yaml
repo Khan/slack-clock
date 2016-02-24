@@ -9,6 +9,8 @@ libraries:
   version: latest
 
 handlers:
-- url: /.*
+- url: /command
+  script: clock.app
+- url: /update
   script: clock.app
   login: admin

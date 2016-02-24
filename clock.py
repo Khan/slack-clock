@@ -66,7 +66,7 @@ def ascii_clock(dt, twentyfour):
     else:
         hh = dt.hour % 12
     mm = dt.minute
-    return ascii_concat([
+    return '\n'.join(ascii_concat([
         ascii_digit(hh / 10),
         ASCII_SPACE,
         ascii_digit(hh % 10),
@@ -76,7 +76,7 @@ def ascii_clock(dt, twentyfour):
         ascii_digit(mm / 10),
         ASCII_SPACE,
         ascii_digit(mm % 10),
-    ])
+    ]))
 
 
 class Clock(ndb.Model):
@@ -88,8 +88,8 @@ class Clock(ndb.Model):
     tz = ndb.StringProperty()
     created = ndb.DateTimeProperty(auto_now_add=True)
     # Filled in after the first send
-    channel_id = ndb.StringProperty(optional=True)
-    slack_ts = ndb.StringProperty(optional=True)
+    channel_id = ndb.StringProperty(required=False)
+    slack_ts = ndb.StringProperty(required=False)
 
     def slack_text(self):
         dt = datetime.datetime.now(pytz.timezone(self.tz))
@@ -97,18 +97,23 @@ class Clock(ndb.Model):
 
     def remove(self):
         if self.slack_ts:
-            hit_slack_api('chat.delete', {
-                'ts': self.slack_ts,
-                'channel': self.channel_id,
-            })
-        self.delete()
+            try:
+                hit_slack_api('chat.delete', {
+                    'ts': self.slack_ts,
+                    'channel': self.channel_id,
+                })
+            except:
+                logging.warning("Couldn't delete old message")
+        self.key.delete()
 
     def update(self):
         if not self.slack_ts:
             # We need to post a new message
+            # TODO(benkraft): warn the user if we're not already in the
+            # channel
             resp = hit_slack_api('chat.postMessage', {
-                'channel': self.id,
-                'text': self.slack_body(),
+                'channel': self.key.id(),
+                'text': self.slack_text(),
                 'as_user': True,
             })
             self.slack_ts = resp['ts']
@@ -118,7 +123,7 @@ class Clock(ndb.Model):
             hit_slack_api('chat.update', {
                 'ts': self.slack_ts,
                 'channel': self.channel_id,
-                'text': self.slack_body(),
+                'text': self.slack_text(),
             })
 
     @staticmethod
@@ -159,8 +164,7 @@ def canonicalize_timezone(name):
 class SlackCommand(webapp2.RequestHandler):
     """Invoked by the slack slash command."""
     def post(self):
-        # TODO(benkraft): check the token to prevent abuse?
-        if self.request.POST['token'] != secrets.slack_command_token:
+        if self.request.POST.get('token') != secrets.slack_command_token:
             logging.warning("token didn't match")
             return
         channel_id = self.request.POST['channel_id']
@@ -183,7 +187,10 @@ class Update(webapp2.RequestHandler):
     """Invoked by cron."""
     def get(self):
         for clock in Clock.query().fetch(100):
-            clock.update()
+            try:
+                clock.update()
+            except Exception as e:
+                logging.exception(e)
 
 app = webapp2.WSGIApplication([
     ('/command', SlackCommand),

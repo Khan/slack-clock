@@ -1,6 +1,6 @@
 PROJECT="slack-clock"
 
-deps:
+deps: requirements.txt
 	pip install -t third_party -r requirements.txt
 
 serve:
@@ -10,4 +10,4 @@ deploy: deps
 	[ -f "secrets.py" ] || ( echo "Please create a secrets.py file with\n\tslack_bot_token = 'xoxb-...'\n\tslack_command_token = '...'\nin it." ; exit 1 )
 	gcloud preview app deploy app.yaml cron.yaml --promote --project $(PROJECT)
 
-.PHONY: serve deploy
+.PHONY: serve deploy deps
