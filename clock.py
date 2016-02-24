@@ -186,24 +186,34 @@ class SlackCommand(webapp2.RequestHandler):
             logging.warning("token didn't match")
             return
         channel_id = self.request.POST['channel_id']
-        raw_tz = self.request.POST['text']
+        args = self.request.POST['text'].split('-')
+
+        raw_tz = args[0]
         tz = canonicalize_timezone(raw_tz)
         if not tz:
             self.response.write('"%s" is not a valid timezone.' % raw_tz)
             return
+
+        # TODO(benkraft): document the 24-hour clock option
+        twentyfour = False
+        if len(args) > 1:
+            if args[1] == '24':
+                twentyfour = True
+
         bot_username = check_channel(channel_id)
         if bot_username:
             self.response.write("I'm not in this channel!  Invite me with "
                                 "`/invite @%s`, then try again." %
                                 bot_username)
             return
+
         existing = Clock.get_by_id(channel_id)
         if existing:
             existing.remove()
         else:
             Clock.prune()
-        # TODO(benkraft): support 24-hour time clocks
-        Clock(id=channel_id, twentyfour=False, tz=tz).update()
+
+        Clock(id=channel_id, twentyfour=twentyfour, tz=tz).update()
 
 
 class Update(webapp2.RequestHandler):
