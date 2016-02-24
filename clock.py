@@ -138,7 +138,7 @@ class Clock(ndb.Model):
             })
 
     @staticmethod
-    def prune(n=5):
+    def prune(n=10):
         for clock in Clock.query().order(-Clock.created).fetch(100)[n:]:
             clock.remove()
 
