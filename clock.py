@@ -103,7 +103,6 @@ class Clock(ndb.Model):
     tz = ndb.StringProperty()
     created = ndb.DateTimeProperty(auto_now_add=True)
     # Filled in after the first send
-    channel_id = ndb.StringProperty(required=False)
     slack_ts = ndb.StringProperty(required=False)
 
     def slack_text(self):
@@ -115,7 +114,7 @@ class Clock(ndb.Model):
             try:
                 hit_slack_api('chat.delete', {
                     'ts': self.slack_ts,
-                    'channel': self.channel_id,
+                    'channel': self.key.id(),
                 })
             except:
                 logging.warning("Couldn't delete old message")
@@ -124,20 +123,17 @@ class Clock(ndb.Model):
     def update(self):
         if not self.slack_ts:
             # We need to post a new message
-            # TODO(benkraft): warn the user if we're not already in the
-            # channel
             resp = hit_slack_api('chat.postMessage', {
                 'channel': self.key.id(),
                 'text': self.slack_text(),
                 'as_user': True,
             })
             self.slack_ts = resp['ts']
-            self.channel_id = resp['channel']
             self.put()
         else:
             hit_slack_api('chat.update', {
                 'ts': self.slack_ts,
-                'channel': self.channel_id,
+                'channel': self.key.id(),
                 'text': self.slack_text(),
             })
 
@@ -176,6 +172,13 @@ def canonicalize_timezone(name):
         return None
 
 
+def check_channel(channel_id):
+    auth = hit_slack_api('auth.test')
+    channel_data = hit_slack_api('channels.info', {'channel': channel_id})
+    if auth['user_id'] not in channel_data['channel']['members']:
+        return auth['user']
+
+
 class SlackCommand(webapp2.RequestHandler):
     """Invoked by the slack slash command."""
     def post(self):
@@ -187,6 +190,12 @@ class SlackCommand(webapp2.RequestHandler):
         tz = canonicalize_timezone(raw_tz)
         if not tz:
             self.response.write('"%s" is not a valid timezone.' % raw_tz)
+            return
+        bot_username = check_channel(channel_id)
+        if bot_username:
+            self.response.write("I'm not in this channel!  Invite me with "
+                                "`/invite @%s`, then try again." %
+                                bot_username)
             return
         existing = Clock.get_by_id(channel_id)
         if existing:
